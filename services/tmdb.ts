@@ -2,21 +2,41 @@ const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
 
 // Languages: te (Telugu), ta (Tamil), ml (Malayalam), kn (Kannada)
-const SOUTH_LANGUAGES = 'te|ta|ml|kn';
+const ALL_SOUTH_LANGUAGES = 'te|ta|ml|kn';
 
 import { CastMember, Movie } from '../types';
 
-export const fetchSouthIndianMovies = async (page = 1): Promise<Movie[]> => {
+export const fetchSouthIndianMovies = async (page = 1, language = 'all'): Promise<Movie[]> => {
     if (!API_KEY) {
         console.warn('TMDB API Key is missing. Using mock data.');
         return MOCK_MOVIES;
     }
 
+    let langParam = ALL_SOUTH_LANGUAGES;
+    if (language === 'telugu') langParam = 'te';
+    if (language === 'tamil') langParam = 'ta';
+    if (language === 'malayalam') langParam = 'ml';
+    // 'all' keeps the default
+
+    // 'all' keeps the default
+
     try {
-        const response = await fetch(
-            `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${SOUTH_LANGUAGES}&sort_by=popularity.desc&page=${page}&vote_count.gte=100`
-        );
+        // Using vote_count.gte=5 to catch almost everything
+        const MAX_PAGES = 20; // Cap page depth to avoid empty results
+        const safePage = page > MAX_PAGES ? (Math.floor(Math.random() * MAX_PAGES) + 1) : page;
+
+        const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langParam}&sort_by=popularity.desc&page=${safePage}&vote_count.gte=5`;
+        console.log('[TMDB] Requesting URL:', url.replace(API_KEY, 'HIDDEN'));
+        const response = await fetch(url);
         const data = await response.json();
+
+        // Retry logic: If 0 results and we are not on page 1, try page 1
+        if ((!data.results || data.results.length === 0) && safePage !== 1) {
+            console.log('[TMDB] 0 Results on page', safePage, '- Retrying Page 1');
+            return fetchSouthIndianMovies(1, language);
+        }
+
+        console.log('[TMDB] Results:', data.results?.length);
         return data.results || [];
     } catch (error) {
         console.error('Error fetching movies:', error);

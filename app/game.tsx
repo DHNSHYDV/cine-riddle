@@ -1,21 +1,27 @@
-import { useRouter } from 'expo-router';
-import { ChevronLeft, Heart, Info } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ArrowRight, ChevronLeft, Heart, Info } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../services/supabase';
 import { fetchSouthIndianMovies, getImageUrl } from '../services/tmdb';
 import { useGameStore } from '../store/gameStore';
 import { Movie } from '../types';
 
 export default function GameScreen() {
     const router = useRouter();
+    const { lang } = useLocalSearchParams();
+
     const [loading, setLoading] = useState(true);
     const [movies, setMovies] = useState<Movie[]>([]);
     const [currentRoundMovies, setCurrentRoundMovies] = useState<Movie[]>([]);
     const [targetMovie, setTargetMovie] = useState<Movie | null>(null);
     const [blurAmount, setBlurAmount] = useState(20);
     const [showClue, setShowClue] = useState(false);
+
+    // Custom Feedback State instead of Alerts
+    const [feedback, setFeedback] = useState<{ type: 'correct' | 'wrong' | 'gameover', message: string } | null>(null);
 
     const { score, lives, incrementScore, decrementLives, resetGame, setLastTargetMovie } = useGameStore();
 
@@ -25,10 +31,11 @@ export default function GameScreen() {
 
     const loadGame = async () => {
         setLoading(true);
-        // Fetch random page between 1 and 10 to get variety
-        const randomPage = Math.floor(Math.random() * 10) + 1;
+        setFeedback(null);
+        // Fetch random page between 1 and 50 to get a mix of popular and mid-range
+        const randomPage = Math.floor(Math.random() * 50) + 1;
         try {
-            const fetchedMovies = await fetchSouthIndianMovies(randomPage);
+            const fetchedMovies = await fetchSouthIndianMovies(randomPage, lang as string);
 
             if (fetchedMovies.length > 3) {
                 setMovies(fetchedMovies);
@@ -44,6 +51,7 @@ export default function GameScreen() {
     };
 
     const startRound = (availableMovies: Movie[]) => {
+        setFeedback(null);
         // Pick 4 unique movies for options
         const shuffled = [...availableMovies].sort(() => 0.5 - Math.random());
         const roundOptions = shuffled.slice(0, 4);
@@ -56,26 +64,39 @@ export default function GameScreen() {
     };
 
     const handleGuess = (movieId: number) => {
+        if (feedback) return; // Prevent double guessing
+
         if (movieId === targetMovie?.id) {
             // Correct!
             incrementScore();
-            Alert.alert("Correct!", `It was ${targetMovie?.title}`, [
-                { text: "Next Movie", onPress: () => startRound(movies) }
-            ]);
-            setBlurAmount(0); // Reveal
+            setBlurAmount(0); // Reveal perfectly
+            setFeedback({ type: 'correct', message: `Yes! It's ${targetMovie?.title}` });
         } else {
             // Wrong!
             decrementLives();
             if (lives <= 1) {
                 // Game Over
                 if (targetMovie) setLastTargetMovie(targetMovie);
-                Alert.alert("Game Over", `The movie was ${targetMovie?.title}. Final Score: ${score}`, [
-                    { text: "See Results", onPress: () => router.replace('/results') }
-                ]);
+                setBlurAmount(0); // Reveal on fail
+                setFeedback({ type: 'gameover', message: `Game Over! It was ${targetMovie?.title}` });
+                saveScore(score); // Save to cloud
             } else {
-                Alert.alert("Wrong!", "Try again or use a clue. Life lost.");
-                setBlurAmount(blurAmount - 5); // Reduces blur slightly as "punishment" or help? Actually keeping it blurred is the challenge.
+                setBlurAmount(blurAmount - 5); // Reduce blur slightly
+                setFeedback({ type: 'wrong', message: "Wrong! Try again." });
+                // Auto-clear wrong message after 1s so they can guess again
+                setTimeout(() => setFeedback(null), 1500);
             }
+        }
+    };
+
+    const saveScore = async (finalScore: number) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            await supabase.from('scores').insert({
+                user_id: user.id,
+                score: finalScore,
+                language: lang as string || 'mixed'
+            });
         }
     };
 
@@ -109,7 +130,7 @@ export default function GameScreen() {
                         <Image
                             source={{ uri: getImageUrl(targetMovie.poster_path) }}
                             className="w-full h-full"
-                            resizeMode="cover"
+                            resizeMode="contain"
                             blurRadius={blurAmount}
                         />
                         {/* Clue Overlay if active */}
@@ -121,21 +142,50 @@ export default function GameScreen() {
                     </Animated.View>
                 )}
 
-                <TouchableOpacity
-                    onPress={() => setShowClue(!showClue)}
-                    className="mb-6 flex-row items-center bg-blue-600/30 px-4 py-2 rounded-full"
-                >
-                    <Info color="white" size={16} />
-                    <Text className="text-white ml-2">Show Clue (-10 pts? Just kidding)</Text>
-                </TouchableOpacity>
+                {/* Feedback Section (Replaces Clue button temporarily if active, or sits below) */}
+                {feedback ? (
+                    <Animated.View entering={FadeIn} className={`w-full p-4 rounded-xl mb-6 flex-row items-center justify-between ${feedback.type === 'correct' ? 'bg-green-600' :
+                        feedback.type === 'gameover' ? 'bg-red-600' : 'bg-red-500/80'
+                        }`}>
+                        <View className="flex-1">
+                            <Text className="text-white font-bold text-lg">{feedback.type === 'correct' ? 'Correct!' : feedback.type === 'gameover' ? 'Game Over' : 'Oops!'}</Text>
+                            <Text className="text-white text-sm">{feedback.message}</Text>
+                        </View>
+
+                        {feedback.type === 'correct' && (
+                            <TouchableOpacity onPress={() => startRound(movies)} className="bg-white p-3 rounded-full">
+                                <ArrowRight color="green" size={24} />
+                            </TouchableOpacity>
+                        )}
+
+                        {feedback.type === 'gameover' && (
+                            <TouchableOpacity onPress={() => router.replace('/results')} className="bg-white p-3 rounded-full">
+                                <Text className="text-red-600 font-bold px-2">Results</Text>
+                            </TouchableOpacity>
+                        )}
+                    </Animated.View>
+                ) : (
+                    <TouchableOpacity
+                        onPress={() => setShowClue(!showClue)}
+                        className="mb-6 flex-row items-center bg-blue-600/30 px-4 py-2 rounded-full"
+                    >
+                        <Info color="white" size={16} />
+                        <Text className="text-white ml-2">Show Clue (-10 pts? Just kidding)</Text>
+                    </TouchableOpacity>
+                )}
 
                 {/* Options */}
                 <View className="w-full gap-3">
                     {currentRoundMovies.map((movie) => (
                         <TouchableOpacity
                             key={movie.id}
+                            disabled={!!feedback && feedback.type !== 'wrong'} // Disable interaction if correct/gameover
                             onPress={() => handleGuess(movie.id)}
-                            className="bg-neutral-800 p-4 rounded-xl border border-neutral-700 active:bg-neutral-700"
+                            className={`p-4 rounded-xl border active:bg-neutral-700 ${
+                                // Highlight correct/wrong logic visually if needed, but for now just standard
+                                feedback && movie.id === targetMovie?.id && feedback.type !== 'wrong' ? 'bg-green-500/50 border-green-500' :
+                                    'bg-neutral-800 border-neutral-700'
+                                }`}
                         >
                             <Text className="text-white text-center font-semibold text-lg">{movie.title}</Text>
                         </TouchableOpacity>
