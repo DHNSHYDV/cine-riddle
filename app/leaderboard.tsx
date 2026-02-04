@@ -23,7 +23,7 @@ export default function LeaderboardScreen() {
 
     async function fetchLeaderboard() {
         setLoading(true);
-        // Join with profiles table to get usernames
+        // Fetch more records to allow for filtering duplicates client-side
         const { data, error } = await supabase
             .from('scores')
             .select(`
@@ -35,10 +35,32 @@ export default function LeaderboardScreen() {
                 profiles (username)
             `)
             .order('score', { ascending: false })
-            .limit(50);
+            .limit(200);
 
-        if (error) console.error('Error fetching leaderboard:', error);
-        else setScores(data || []);
+        if (error) {
+            console.error('Error fetching leaderboard:', error);
+        } else {
+            // Filter unique users, keeping their highest score (first occurrence)
+            const uniqueScores: ScoreEntry[] = [];
+            const seenUsers = new Set<string>();
+
+            for (const entry of data || []) {
+                if (!seenUsers.has(entry.user_id)) {
+                    seenUsers.add(entry.user_id);
+
+                    // Supabase might return profiles as an array depending on the relation detection
+                    const profiles = Array.isArray(entry.profiles) ? entry.profiles[0] : entry.profiles;
+
+                    uniqueScores.push({
+                        ...entry,
+                        profiles
+                    } as ScoreEntry);
+
+                    if (uniqueScores.length >= 50) break;
+                }
+            }
+            setScores(uniqueScores);
+        }
 
         setLoading(false);
     }

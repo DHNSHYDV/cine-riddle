@@ -15,10 +15,10 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="game" options={{ headerShown: false }} />
-        <Stack.Screen name="results" options={{ headerShown: false }} />
+      <Stack screenOptions={{ animation: 'fade_from_bottom', headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="game" />
+        <Stack.Screen name="results" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
