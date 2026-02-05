@@ -16,7 +16,7 @@ export default function HomeScreen() {
     ];
 
     const startGame = (langId: string) => {
-        router.push({ pathname: '/game', params: { lang: langId } });
+        router.push({ pathname: '/mode-select', params: { lang: langId } });
     };
 
     return (

@@ -40,23 +40,32 @@ export default function AuthScreen() {
             console.log('Signup successful, data:', data);
 
             if (data?.user) {
-                // Initialize Profile
-                const profileData = {
-                    id: data.user.id,
-                    username: email.split('@')[0] || 'Operator',
-                    updated_at: new Date(),
-                };
-                console.log('Creating profile with:', profileData);
+                // Check if we have a session (Email confirmation might be off, or auto-login)
+                if (data.session) {
+                    // Initialize Profile
+                    const profileData = {
+                        id: data.user.id,
+                        username: email.split('@')[0] || 'Operator',
+                    };
+                    console.log('Creating profile with:', profileData);
 
-                const { error: profileError } = await supabase.from('profiles').insert(profileData);
+                    const { error: profileError } = await supabase.from('profiles').insert(profileData);
 
-                if (profileError) {
-                    console.error('Profile creation failed:', profileError);
-                    Alert.alert('Warning', 'Account created but profile setup failed: ' + profileError.message);
+                    if (profileError) {
+                        console.error('Profile creation failed:', profileError);
+                        // Don't alert the user if it's just a duplicate or RLS issue that doesn't block login
+                        // Alert.alert('Warning', 'Account created but profile setup failed: ' + profileError.message);
+                    } else {
+                        Alert.alert('Success', 'Account & Profile created! Welcome.');
+                        // Optional: Auto-redirect if you want
+                        // router.replace('/');
+                    }
+                } else {
+                    // No session = Email verification likely required
+                    Alert.alert('Check your Email', 'Please confirm your email address to complete registration.');
                 }
             }
 
-            Alert.alert('Success', 'Profile created! Please Sign In.');
             setIsLogin(true); // Switch to login view
         }
         setLoading(false);
