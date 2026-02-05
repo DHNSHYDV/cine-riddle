@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cine Riddle",
     "slug": "cine-riddle",
-    "version": "1.0.3",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "projmov",
