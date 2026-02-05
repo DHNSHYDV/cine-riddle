@@ -1,9 +1,8 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Trophy, User } from 'lucide-react-native';
+import { Github, Mail, MessageSquare, Trophy, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, {
+import { ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
     Easing,
     useAnimatedStyle,
     useSharedValue,
@@ -12,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg';
-
+import { supabase } from '../services/supabase';
 const { width, height } = Dimensions.get('window');
 
 // --- 1. Matrix Background Component (Pure implementation of CSS) ---
@@ -40,12 +39,10 @@ const MatrixBackground = () => {
     return (
         <View style={styles.container}>
             {/* Base Dark Color */}
-            <View style={{ position: 'absolute', inset: 0, backgroundColor: '#0d0d1a' }} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0d0d1a' }]} />
 
-            {/* SVG Grid Pattern 
-                CSS: repeating-linear-gradient(45deg, rgba(0, 255, 170, 0.05) 0px 1px, transparent 1px 12px)
-            */}
-            <View style={{ position: 'absolute', inset: 0, opacity: 0.6 }}>
+            {/* SVG Grid Pattern */}
+            <View style={[StyleSheet.absoluteFill, { opacity: 0.6 }]}>
                 <Svg height="100%" width="100%">
                     <Defs>
                         {/* Diagonal Line Pattern */}
@@ -72,21 +69,20 @@ const MatrixBackground = () => {
                 </Svg>
             </View>
 
-            {/* Grid Box Shadow / Border Effect Simulation
-                CSS: box-shadow: inset 0 0 40px rgba(0, 255, 170, 0.1)
-            */}
+            {/* Grid Box Shadow / Border Effect Simulation */}
+            {/* Using absoluteFill to ensure it covers the screen and doesn't collapse */}
             <View
                 pointerEvents="none"
-                style={{
-                    position: 'absolute', inset: 0,
-                    borderWidth: 1, borderColor: 'rgba(0, 255, 170, 0.1)',
-                    shadowColor: 'rgba(0, 255, 170, 0.5)', shadowRadius: 40, shadowOpacity: 0.2
-                }}
+                style={[
+                    StyleSheet.absoluteFill,
+                    {
+                        borderWidth: 1,
+                        borderColor: 'rgba(0, 255, 170, 0.1)',
+                        // Shadows on Android require elevation, but effectively invisible on full-screen absolute views usually
+                        // We'll keep it simple to avoid artifacts
+                    }
+                ]}
             />
-
-            {/* The Border Flow Animation (::before)
-                Simulated with a moving gradient overlay or simple opacity pulse for now
-            */}
         </View>
     );
 };
@@ -116,20 +112,6 @@ const StartShowButton = ({ onPress }: { onPress: () => void }) => {
             style={{ transform: [{ scale: isPressed ? 0.97 : 1 }] }}
         >
             <View style={buttonStyles.buttonContainer}>
-                {/* The Rotating ".hoverEffect div" 
-                    CSS: width: 10rem (160px), height: 10rem... linear-gradient... filter: blur(20px)
-                */}
-                <View style={[buttonStyles.hoverEffect, { opacity: 0.5 }]}>
-                    <Animated.View style={[{ width: 200, height: 200, borderRadius: 100 }, animatedGradientStyle]}>
-                        <LinearGradient
-                            colors={['rgba(222, 0, 75, 1)', 'rgba(191, 70, 255, 1)', 'rgba(0, 212, 255, 1)']}
-                            start={{ x: 0, y: 0.5 }}
-                            end={{ x: 1, y: 0.5 }}
-                            style={{ flex: 1, borderRadius: 100 }}
-                        />
-                    </Animated.View>
-                </View>
-
                 {/* Button Content (Text) */}
                 <Text style={buttonStyles.text}>Start Show</Text>
             </View>
@@ -140,6 +122,44 @@ const StartShowButton = ({ onPress }: { onPress: () => void }) => {
 
 export default function LandingScreen() {
     const router = useRouter();
+    const [feedbackVisible, setFeedbackVisible] = useState(false);
+    const [feedbackText, setFeedbackText] = useState('');
+    const [sendingFeedback, setSendingFeedback] = useState(false);
+
+    async function submitFeedback() {
+        if (!feedbackText.trim()) {
+            Alert.alert('Empty', 'Please enter some feedback.');
+            return;
+        }
+
+        try {
+            setSendingFeedback(true);
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (!user) {
+                Alert.alert('Error', 'You must be logged in to send feedback.');
+                setFeedbackVisible(false);
+                router.push('/auth');
+                return;
+            }
+
+            const { error } = await supabase.from('feedback').insert({
+                user_id: user.id,
+                email: user.email,
+                message: feedbackText.trim(),
+            });
+
+            if (error) throw error;
+
+            Alert.alert('Thank You', 'Your feedback has been sent!');
+            setFeedbackText('');
+            setFeedbackVisible(false);
+        } catch (error: any) {
+            Alert.alert('Error', error.message);
+        } finally {
+            setSendingFeedback(false);
+        }
+    }
 
     return (
         <View style={{ flex: 1, backgroundColor: '#0d0d1a' }}>
@@ -176,9 +196,118 @@ export default function LandingScreen() {
                 </View>
 
                 {/* Centered Button */}
-                <View style={{ alignItems: 'center', marginBottom: 150 }}>
+                <View style={{ alignItems: 'center' }}>
                     <StartShowButton onPress={() => router.push('/language-select')} />
                 </View>
+
+                {/* Footer: Social Links */}
+                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: 30, paddingHorizontal: 30, width: '100%', position: 'relative' }}>
+                    {/* Contact - Bottom Left */}
+                    <Pressable
+                        onPress={() => Linking.openURL('mailto:dhanushyadavkrish@gmail.com')}
+                        style={{ position: 'absolute', left: 30, bottom: 30, opacity: 0.8 }}
+                    >
+                        <Mail color="#fff" size={24} />
+                    </Pressable>
+
+                    {/* GitHub - Bottom Center */}
+                    <Pressable
+                        onPress={() => Linking.openURL('https://github.com/DHNSHYDV/cine-riddle')}
+                        style={{ opacity: 0.8 }}
+                    >
+                        <Github color="#fff" size={24} />
+                    </Pressable>
+
+                    {/* Feedback - Bottom Right */}
+                    <Pressable
+                        onPress={() => setFeedbackVisible(true)}
+                        style={{ position: 'absolute', right: 30, bottom: 30, opacity: 0.8 }}
+                    >
+                        <MessageSquare color="#fff" size={24} />
+                    </Pressable>
+                </View>
+
+                {/* Feedback Modal */}
+                <Modal
+                    visible={feedbackVisible}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setFeedbackVisible(false)}
+                >
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
+                        <Pressable style={StyleSheet.absoluteFill} onPress={() => setFeedbackVisible(false)} />
+
+                        <KeyboardAvoidingView
+                            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                            style={{ width: '100%', alignItems: 'center' }}
+                        >
+                            <View style={{
+                                width: '85%',
+                                backgroundColor: 'rgba(26, 26, 46, 0.95)',
+                                borderRadius: 24,
+                                padding: 24,
+                                borderWidth: 1,
+                                borderColor: 'rgba(255, 255, 255, 0.1)',
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 10 },
+                                shadowOpacity: 0.5,
+                                shadowRadius: 20,
+                                elevation: 10
+                            }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                                    <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold' }}>Send Feedback</Text>
+                                    <Pressable onPress={() => setFeedbackVisible(false)} hitSlop={10}>
+                                        <Text style={{ color: '#999', fontSize: 16 }}>Close</Text>
+                                    </Pressable>
+                                </View>
+
+                                <TextInput
+                                    style={{
+                                        backgroundColor: '#0d0d1a',
+                                        color: '#fff',
+                                        borderRadius: 12,
+                                        padding: 16,
+                                        height: 140,
+                                        textAlignVertical: 'top',
+                                        borderWidth: 1,
+                                        borderColor: '#333',
+                                        fontSize: 16,
+                                        marginBottom: 12
+                                    }}
+                                    placeholder="What's on your mind? (max 500 chars)"
+                                    placeholderTextColor="#666"
+                                    multiline
+                                    maxLength={500}
+                                    value={feedbackText}
+                                    onChangeText={setFeedbackText}
+                                />
+                                <Text style={{ color: '#666', textAlign: 'right', marginBottom: 20, fontSize: 12 }}>
+                                    {feedbackText.length}/500
+                                </Text>
+
+                                <Pressable
+                                    onPress={submitFeedback}
+                                    disabled={sendingFeedback}
+                                    style={{
+                                        backgroundColor: '#00ffaa',
+                                        borderRadius: 12,
+                                        padding: 16,
+                                        alignItems: 'center',
+                                        opacity: sendingFeedback ? 0.7 : 1
+                                    }}
+                                >
+                                    {sendingFeedback ? (
+                                        <ActivityIndicator color="#000" />
+                                    ) : (
+                                        <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 16, textTransform: 'uppercase', letterSpacing: 1 }}>
+                                            Send Feedback
+                                        </Text>
+                                    )}
+                                </Pressable>
+                            </View>
+                        </KeyboardAvoidingView>
+                    </View>
+                </Modal>
             </SafeAreaView>
         </View>
     );

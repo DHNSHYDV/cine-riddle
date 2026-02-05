@@ -22,12 +22,12 @@ export default function ProfileScreen() {
             const { data: { user } } = await supabase.auth.getUser();
 
             if (!user) {
-                // Not logged in? Go to Auth
                 router.replace('/auth');
                 return;
             }
 
             setUser(user);
+            console.log('Fetching profile for user:', user.id);
 
             const { data, error } = await supabase
                 .from('profiles')
@@ -35,15 +35,18 @@ export default function ProfileScreen() {
                 .eq('id', user.id)
                 .single();
 
-            if (error && error.code !== 'PGRST116') {
-                console.error('Error fetching profile:', error);
+            if (error) {
+                console.log('Error fetching profile (might not exist yet):', error.message);
             }
 
             if (data) {
+                console.log('Profile loaded:', data);
                 setUsername(data.username || '');
+            } else {
+                console.log('No profile found, defaulting to empty.');
             }
         } catch (error) {
-            console.error('Unexpected error:', error);
+            console.error('Unexpected error in getProfile:', error);
         } finally {
             setLoading(false);
         }
@@ -52,6 +55,13 @@ export default function ProfileScreen() {
     async function updateProfile() {
         try {
             setSaving(true);
+            console.log('Updating profile for:', user?.id, 'with username:', username);
+
+            if (!user) {
+                Alert.alert('Error', 'No user session found.');
+                return;
+            }
+
             const { error } = await supabase
                 .from('profiles')
                 .upsert({
@@ -61,9 +71,11 @@ export default function ProfileScreen() {
                 });
 
             if (error) {
+                console.error('Profile update failed:', error);
                 throw error;
             }
 
+            console.log('Profile update success');
             Alert.alert('Success', 'Codename updated successfully!');
         } catch (error: any) {
             Alert.alert('Error', error.message);

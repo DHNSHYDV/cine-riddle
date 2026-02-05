@@ -8,7 +8,7 @@ import { supabase } from '../services/supabase';
 export default function AuthScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [username, setUsername] = useState('');
+
     const [loading, setLoading] = useState(false);
     const [isLogin, setIsLogin] = useState(true);
     const router = useRouter();
@@ -27,21 +27,33 @@ export default function AuthScreen() {
 
     async function signUpWithEmail() {
         setLoading(true);
+        console.log('Attempting signup...');
+
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
         });
 
-        if (error) Alert.alert('Error', error.message);
-        else {
+        if (error) {
+            Alert.alert('Error', error.message);
+        } else {
+            console.log('Signup successful, data:', data);
+
             if (data?.user) {
                 // Initialize Profile
-                const { error: profileError } = await supabase.from('profiles').insert({
+                const profileData = {
                     id: data.user.id,
-                    username: username || email.split('@')[0] || 'Operator',
+                    username: email.split('@')[0] || 'Operator',
                     updated_at: new Date(),
-                });
-                if (profileError) console.error('Profile creation failed:', profileError);
+                };
+                console.log('Creating profile with:', profileData);
+
+                const { error: profileError } = await supabase.from('profiles').insert(profileData);
+
+                if (profileError) {
+                    console.error('Profile creation failed:', profileError);
+                    Alert.alert('Warning', 'Account created but profile setup failed: ' + profileError.message);
+                }
             }
 
             Alert.alert('Success', 'Profile created! Please Sign In.');
@@ -66,18 +78,7 @@ export default function AuthScreen() {
                 </View>
 
                 <View className="space-y-4 gap-4">
-                    {!isLogin && (
-                        <View>
-                            <TextInput
-                                onChangeText={setUsername}
-                                value={username}
-                                placeholder="CODENAME (USERNAME)"
-                                placeholderTextColor="#666"
-                                autoCapitalize="none"
-                                className="bg-[#1a1a2e] text-[#00ffaa] p-4 rounded-lg border border-[#333] font-medium tracking-wider"
-                            />
-                        </View>
-                    )}
+
                     <View>
                         <TextInput
                             onChangeText={setEmail}
