@@ -95,7 +95,8 @@ export default function GameScreen() {
             await supabase.from('scores').insert({
                 user_id: user.id,
                 score: finalScore,
-                language: lang as string || 'mixed'
+                language: lang as string || 'mixed',
+                game_mode: 'poster'
             });
         }
     };

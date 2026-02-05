@@ -1,8 +1,8 @@
 const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
 
-// Languages: te (Telugu), ta (Tamil), ml (Malayalam), kn (Kannada)
-const ALL_SOUTH_LANGUAGES = 'te|ta|ml|kn';
+// Languages: te (Telugu), ta (Tamil), ml (Malayalam)
+const ALL_SOUTH_LANGUAGES = 'te|ta|ml';
 
 import { CastMember, Movie } from '../types';
 
@@ -16,16 +16,13 @@ export const fetchSouthIndianMovies = async (page = 1, language = 'all'): Promis
     if (language === 'telugu') langParam = 'te';
     if (language === 'tamil') langParam = 'ta';
     if (language === 'malayalam') langParam = 'ml';
-    // 'all' keeps the default
-
-    // 'all' keeps the default
 
     try {
-        // Using vote_count.gte=5 to catch almost everything
-        const MAX_PAGES = 20; // Cap page depth to avoid empty results
+        // Increase page depth for library expansion
+        const MAX_PAGES = 50;
         const safePage = page > MAX_PAGES ? (Math.floor(Math.random() * MAX_PAGES) + 1) : page;
 
-        const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langParam}&sort_by=popularity.desc&page=${safePage}&vote_count.gte=5`;
+        const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langParam}&sort_by=popularity.desc&page=${safePage}&vote_count.gte=10`;
         console.log('[TMDB] Requesting URL:', url.replace(API_KEY, 'HIDDEN'));
         const response = await fetch(url);
         const data = await response.json();

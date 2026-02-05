@@ -3,14 +3,18 @@ import { Audio } from 'expo-av';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Music as MusicIcon, Pause, Play, SkipForward } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { ArrowLeft, Heart, Info, Music as MusicIcon, Pause, Play, SkipForward } from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AudioTrack, getMysteryAudio, getRandomMovieForLanguage, regionalPlaylists } from '../services/music-service';
+import { supabase } from '../services/supabase';
+import { fetchSouthIndianMovies } from '../services/tmdb';
+import { useGameStore } from '../store/gameStore';
 
 const { width } = Dimensions.get('window');
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export default function MusicGameScreen() {
     const router = useRouter();
@@ -18,22 +22,45 @@ export default function MusicGameScreen() {
     const effectiveLang = lang || 'telugu';
 
     const [track, setTrack] = useState<AudioTrack | null>(null);
+    const [correctMovie, setCorrectMovie] = useState('');
     const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(true);
     const [revealed, setRevealed] = useState(false);
     const [timer, setTimer] = useState(30);
-    const [score, setScore] = useState(0);
+    const [showClue, setShowClue] = useState(false);
+    const [imageBlurAmount, setImageBlurAmount] = useState(80);
+    const [feedback, setFeedback] = useState<{ type: 'correct' | 'wrong' | 'gameover', message: string } | null>(null);
+    const { score, lives, incrementScore, decrementLives, playedTracks, addPlayedTrack } = useGameStore();
 
-    // Animation Values
-    const blurIntensity = useSharedValue(90);
-    const pulseScale = useSharedValue(1);
+
+    const soundRef = useRef<Audio.Sound | null>(null);
+    const blurIntensity = useSharedValue(100);
 
     // Initial Load
     useEffect(() => {
+        const setupAudio = async () => {
+            try {
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    staysActiveInBackground: false,
+                    interruptionModeIOS: 1, // interruptionModeIOS.DoNotMix
+                    playsInSilentModeIOS: true,
+                    shouldDuckAndroid: true,
+                    interruptionModeAndroid: 1, // interruptionModeAndroid.DoNotMix
+                    playThroughEarpieceAndroid: false,
+                });
+                console.log("[Music] Audio mode set successfully");
+            } catch (err) {
+                console.error("[Music] Error setting audio mode:", err);
+            }
+        };
+        setupAudio();
         loadNewRound();
         return () => {
-            stopAudio();
+            if (soundRef.current) {
+                soundRef.current.unloadAsync().catch(err => console.log("[Music] Cleanup error:", err));
+            }
         };
     }, []);
 
@@ -53,59 +80,101 @@ export default function MusicGameScreen() {
         }
     }, [timer, loading, revealed]);
 
-    // Pulse Animation for "Listening" state
-    useEffect(() => {
-        if (isPlaying) {
-            pulseScale.value = withRepeat(
-                withSequence(withTiming(1.1, { duration: 500 }), withTiming(1, { duration: 500 })),
-                -1, true
-            );
-        } else {
-            pulseScale.value = withTiming(1);
-        }
-    }, [isPlaying]);
+
 
 
     async function loadNewRound() {
         setLoading(true);
         setRevealed(false);
         setTimer(30);
-        blurIntensity.value = withTiming(40, { duration: 1000 }); // Reset blur to high (visual bug fix: 90 sometimes too heavy, 40-50 is good)
+        setImageBlurAmount(80);
+        blurIntensity.value = withTiming(90, { duration: 1000 }); // User requested 90% blur for difficulty
 
         try {
             await stopAudio();
+            setFeedback(null); // Fix: Clear previous result card
 
-            // 1. Pick a movie
-            const movieQuery = getRandomMovieForLanguage(effectiveLang);
+            let audioData = null;
+            let attempts = 0;
+            let selectedMovie = "";
 
-            // 2. Fetch Audio
-            const audioData = await getMysteryAudio(movieQuery + " soundtrack");
+            // 1. Try TMDB dynamic fetch first for vastness
+            while (!audioData && attempts < 3) {
+                const randomPage = Math.floor(Math.random() * 50) + 1;
+                const moviesFromTMDB = await fetchSouthIndianMovies(randomPage, effectiveLang);
 
-            if (!audioData || !audioData.previewUrl) {
-                // Retry once if failed
-                console.log("Retrying fetch...");
-                const retryData = await getMysteryAudio(getRandomMovieForLanguage(effectiveLang) + " song");
-                if (retryData) setTrack(retryData);
-                else throw new Error("Could not find music");
-            } else {
-                setTrack(audioData);
+                if (moviesFromTMDB && moviesFromTMDB.length > 0) {
+                    // Pick 3 random movies from this page to try (to speed up loading)
+                    const candidatesFiltered = moviesFromTMDB.filter(m => !playedTracks.includes(m.title));
+                    const candidates = candidatesFiltered.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+                    for (const m of candidates) {
+                        console.log(`[Music] Trying dynamic movie: ${m.title}`);
+                        const data = await getMysteryAudio(`${m.title} soundtrack`);
+                        if (data && data.previewUrl) {
+                            audioData = data;
+                            selectedMovie = m.title;
+                            break;
+                        }
+                    }
+                }
+                attempts++;
             }
+
+            // 2. Fallback to hardcoded list if TMDB/iTunes combo fails or no connection
+            if (!audioData) {
+                console.log("[Music] Dynamic fetch failed or too slow, falling back to classic collection");
+                let movieData = getRandomMovieForLanguage(effectiveLang);
+                let fallbackAttempts = 0;
+                while (playedTracks.includes(movieData.movie) && fallbackAttempts < 5) {
+                    movieData = getRandomMovieForLanguage(effectiveLang);
+                    fallbackAttempts++;
+                }
+                const { movie, searchTag } = movieData;
+                selectedMovie = movie;
+                audioData = await getMysteryAudio(`${movie} ${searchTag} movie songs`);
+
+                if (!audioData || !audioData.previewUrl) {
+                    audioData = await getMysteryAudio(`${movie} soundtrack`);
+                }
+            }
+
+            if (!audioData) throw new Error("Could not find music");
+
+            addPlayedTrack(selectedMovie); // Track globally
+            setTrack(audioData);
+            setCorrectMovie(audioData.movie);
 
             // 3. Load Audio Object
-            if (audioData?.previewUrl) {
-                const { sound: newSound } = await Audio.Sound.createAsync(
-                    { uri: audioData.previewUrl },
-                    { shouldPlay: true, isLooping: true }
-                );
-                setSound(newSound);
-                setIsPlaying(true);
-            }
+            console.log(`[Music] Loading sound from: ${audioData.previewUrl}`);
+            const { sound: newSound } = await Audio.Sound.createAsync(
+                { uri: audioData.previewUrl },
+                { shouldPlay: true, isLooping: true, volume: 1.0 }
+            );
+            setSound(newSound);
+            soundRef.current = newSound; // Track for cleanup
+            setIsPlaying(true);
+            console.log("[Music] Sound loaded and playing");
 
         } catch (e) {
-            Alert.alert("Error", "Could not load music round. Check connection.");
+            console.error("[Music] Error loading round:", e);
+            Alert.alert("Error", "Could not load music round. Check your connection.");
             router.back();
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function saveScore(finalScore: number) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            await supabase.from('scores').insert({
+                user_id: user.id,
+                score: finalScore,
+                language: effectiveLang,
+                game_mode: 'soundtrack'
+            });
+            console.log("[Music] Score saved successfully");
         }
     }
 
@@ -113,6 +182,7 @@ export default function MusicGameScreen() {
         if (sound) {
             await sound.unloadAsync();
             setSound(null);
+            soundRef.current = null;
             setIsPlaying(false);
         }
     }
@@ -127,36 +197,58 @@ export default function MusicGameScreen() {
         setIsPlaying(!isPlaying);
     }
 
-    const revealAnswer = (correct: boolean) => {
-        setRevealed(true);
-        blurIntensity.value = withTiming(0, { duration: 500 });
-        if (correct) setScore(s => s + 10);
+    const revealAnswer = async (correct: boolean) => {
+        if (correct) {
+            setRevealed(true);
+            setImageBlurAmount(0);
+            blurIntensity.value = withTiming(0, { duration: 500 });
+            incrementScore();
+            setFeedback({ type: 'correct', message: `Yes! It's from ${correctMovie}` });
+        } else {
+            decrementLives();
+            if (lives <= 1) {
+                setRevealed(true);
+                setImageBlurAmount(0);
+                blurIntensity.value = withTiming(0, { duration: 500 });
+                setFeedback({ type: 'gameover', message: `Game Over! It was ${correctMovie}` });
+                await saveScore(score); // Await high score saving
+            } else {
+                // Wrong but can try again
+                setImageBlurAmount(prev => Math.max(prev - 20, 20)); // Reduce blur slightly
+                setFeedback({ type: 'wrong', message: "Oops! Try again." });
+                setTimeout(() => setFeedback(null), 1500);
+            }
+        }
     };
 
     const handleGuess = (guess: string) => {
-        if (revealed) return;
-        // Simple logic for now: Check if movie title is in the guess (Since we don't have 4 options yet, just simulating "Reveal")
-        // Ideally we fetch 3 fake options. For now, let's just make it a "Reveal" button game or self-verify.
-        // Wait, the user prompt implied multiple choice.
-        // Let's implement a "Skip/Next" flow for V1 or a simple input?
-        // Let's do: Show 4 options (1 correct, 3 random from our list).
-
-        const isCorrect = guess === track?.movie;
+        if (revealed || feedback?.type === 'correct') return;
+        const isCorrect = guess === correctMovie;
         revealAnswer(isCorrect);
     };
 
     // Generate Options (Quick & Dirty for V1)
     const options = React.useMemo(() => {
-        if (!track) return [];
-        const correct = track.movie;
-        // Get 3 random others
+        if (!track || !correctMovie) return [];
+        const correct = correctMovie;
+        // Get 3 random others from the fallback pool
         const pool = regionalPlaylists[effectiveLang as keyof typeof regionalPlaylists] || regionalPlaylists['telugu'];
-        const wrong = pool.filter((m: string) => !correct.includes(m)).sort(() => 0.5 - Math.random()).slice(0, 3);
+        const wrong = pool.filter((m: string) => !correct.toLowerCase().includes(m.toLowerCase())).sort(() => 0.5 - Math.random()).slice(0, 3);
         return [correct, ...wrong].sort(() => 0.5 - Math.random());
-    }, [track]);
+    }, [track, correctMovie]);
 
     const animatedImageStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: pulseScale.value }]
+        transform: [{ scale: 1 }]
+    }));
+
+    const animatedBlurProps = useAnimatedProps(() => ({
+        intensity: blurIntensity.value
+    }));
+
+    const animatedBlurStyle = useAnimatedStyle(() => ({
+        // Foolproof blur for Android (Image blurRadius doesn't support animation smoothly in all versions, 
+        // but we can use it as a static-ish fallback or drive it via state/ref if needed.
+        // Actually, we'll use conditional prop in the render.)
     }));
 
     if (loading) {
@@ -180,69 +272,111 @@ export default function MusicGameScreen() {
 
             <SafeAreaView className="flex-1 px-6">
 
-                {/* Header */}
+                {/* Header (Matching Poster Game Style) */}
                 <View className="flex-row justify-between items-center mb-8">
                     <Pressable onPress={() => router.back()} className="p-2 bg-white/10 rounded-full">
                         <ArrowLeft color="white" size={24} />
                     </Pressable>
-                    <View className="items-center">
-                        <Text className="text-gray-400 text-xs font-bold tracking-[2px]">LEVEL {score / 10 + 1}</Text>
-                        <Text className="text-[#00ffaa] text-lg font-black tracking-widest">SCORE: {score}</Text>
+                    <Text className="text-white text-lg font-bold">Score: {score}</Text>
+                    <View className="flex-row items-center space-x-1">
+                        <Heart color={lives > 0 ? "#f43f5e" : "gray"} fill={lives > 0 ? "#f43f5e" : "gray"} size={24} />
+                        <Text className="text-white font-bold ml-1">{lives}</Text>
                     </View>
-                    <View className="w-10" />
                 </View>
 
                 {/* Main Content: Blurred Art */}
                 <View className="flex-1 items-center justify-center mb-10">
                     <Animated.View style={[{ width: width * 0.8, height: width * 0.8, borderRadius: 20, overflow: 'hidden', elevation: 20, shadowColor: '#00ffaa', shadowRadius: 20 }, animatedImageStyle]}>
-                        {track && <Image source={{ uri: track.artworkUrl }} style={{ width: '100%', height: '100%' }} />}
-                        {/* The Magic Blur Layer */}
-                        <BlurView intensity={revealed ? 0 : 50} tint="dark" style={StyleSheet.absoluteFill}>
+                        {track && (
+                            <Image
+                                source={{ uri: track.artworkUrl }}
+                                style={{ width: '100%', height: '100%' }}
+                                blurRadius={revealed ? 0 : imageBlurAmount} // Dynamic blur for wrong answers
+                            />
+                        )}
+
+                        {/* THE BLUR (Improved) */}
+                        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.9)' }]}>
                             {!revealed && (
-                                <View className="flex-1 items-center justify-center">
-                                    <View className="bg-black/40 p-4 rounded-full backdrop-blur-md">
-                                        <MusicIcon color="#fff" size={40} />
+                                <AnimatedBlurView animatedProps={animatedBlurProps} tint="dark" style={StyleSheet.absoluteFill}>
+                                    <View className="flex-1 items-center justify-center">
+                                        <MusicIcon color="#00ffaa" size={60} opacity={0.5} />
                                     </View>
-                                </View>
+                                </AnimatedBlurView>
                             )}
-                        </BlurView>
+                        </Animated.View>
+
+                        {/* Pause/Play Button (Top Right) */}
+                        {!loading && (
+                            <Pressable
+                                onPress={togglePlay}
+                                style={{ position: 'absolute', top: 16, right: 16, zIndex: 50 }}
+                                className="p-3 bg-black/50 border border-white/20 rounded-full shadow-lg"
+                            >
+                                {isPlaying ? <Pause color="white" size={24} fill="white" /> : <Play color="white" size={24} fill="white" />}
+                            </Pressable>
+                        )}
+
+                        {/* Clue Overlay */}
+                        {showClue && !revealed && (
+                            <View className="absolute bottom-0 w-full bg-black/80 p-4">
+                                <Text className="text-white italic text-center text-xs">Artist: {track?.artist}</Text>
+                            </View>
+                        )}
                     </Animated.View>
 
-                    {/* Timer Bar */}
-                    <View className="w-full h-1 bg-gray-800 mt-8 rounded-full overflow-hidden">
+                    {/* Timer Bar (The "Sand") */}
+                    <View className="w-full h-1.5 bg-white/10 mt-8 rounded-full overflow-hidden border border-white/5">
                         <Animated.View style={{ width: `${(timer / 30) * 100}%`, height: '100%', backgroundColor: timer < 10 ? '#f43f5e' : '#00ffaa' }} />
                     </View>
-                    <Text className="text-white mt-2 font-mono">{timer}s</Text>
+                    <Text className="text-gray-400 mt-2 font-mono text-xs tracking-widest">{timer} SECONDS REMAINING</Text>
                 </View>
 
-                {/* Options / Controls */}
+                {/* Options / Feedback Layer */}
                 <View className="mb-8 gap-3">
-                    {revealed ? (
-                        <View className="items-center gap-4">
-                            <Text className="text-white text-2xl font-bold text-center">{track?.movie}</Text>
-                            <Text className="text-gray-400 text-sm text-center mb-4">{track?.title} • {track?.artist}</Text>
-                            <Pressable onPress={loadNewRound} className="bg-[#00ffaa] px-10 py-4 rounded-full active:scale-95">
-                                <Text className="text-black font-bold text-lg tracking-widest">NEXT TRACK <SkipForward size={18} color="black" /></Text>
-                            </Pressable>
-                        </View>
+                    {feedback ? (
+                        <Animated.View entering={FadeIn} className={`w-full p-4 rounded-xl mb-2 flex-row items-center justify-between ${feedback.type === 'correct' ? 'bg-green-600' :
+                            feedback.type === 'gameover' ? 'bg-red-600' : 'bg-red-500/80'
+                            }`}>
+                            <View className="flex-1">
+                                <Text className="text-white font-bold text-lg">{feedback.type === 'correct' ? 'Correct!' : feedback.type === 'gameover' ? 'Game Over' : 'Oops!'}</Text>
+                                <Text className="text-white text-sm">{feedback.message}</Text>
+                            </View>
+
+                            {feedback.type === 'correct' && (
+                                <Pressable onPress={loadNewRound} className="bg-white p-2 rounded-full">
+                                    <SkipForward color="green" size={24} />
+                                </Pressable>
+                            )}
+
+                            {feedback.type === 'gameover' && (
+                                <Pressable onPress={() => router.replace('/results')} className="bg-white p-2 rounded-full">
+                                    <Text className="text-red-600 font-bold px-2">Results</Text>
+                                </Pressable>
+                            )}
+                        </Animated.View>
                     ) : (
-                        options.map((option, idx) => (
+                        <>
                             <Pressable
-                                key={idx}
-                                onPress={() => handleGuess(option)}
-                                className="bg-white/5 border border-white/10 p-4 rounded-xl active:bg-white/20 transition-colors"
+                                onPress={() => setShowClue(!showClue)}
+                                className="mb-2 flex-row items-center self-center bg-white/5 border border-white/10 px-4 py-1.5 rounded-full"
                             >
-                                <Text className="text-white text-center font-bold text-lg">{option}</Text>
+                                <Info color="#00ffaa" size={14} />
+                                <Text className="text-white ml-2 text-xs">Show Clue</Text>
                             </Pressable>
-                        ))
+
+                            {options.map((option, idx) => (
+                                <Pressable
+                                    key={idx}
+                                    onPress={() => handleGuess(option)}
+                                    className="bg-white/5 border border-white/10 p-4 rounded-xl active:bg-white/20 transition-colors"
+                                >
+                                    <Text className="text-white text-center font-bold text-lg">{option}</Text>
+                                </Pressable>
+                            ))}
+                        </>
                     )}
                 </View>
-
-                {/* Playback Controls Check */}
-                <Pressable onPress={togglePlay} className="absolute bottom-6 right-6 p-4 bg-[#00ffaa] rounded-full shadow-lg">
-                    {isPlaying ? <Pause color="black" fill="black" /> : <Play color="black" fill="black" />}
-                </Pressable>
-
             </SafeAreaView>
         </View>
     );

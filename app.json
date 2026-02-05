@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cine Riddle",
     "slug": "cine-riddle",
-    "version": "1.0.2",
+    "version": "2.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "projmov",
@@ -19,7 +19,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.Proj_mov"
+      "package": "com.anonymous.Proj_mov",
+      "versionCode": 3
     },
     "web": {
       "output": "static",

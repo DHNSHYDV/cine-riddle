@@ -24,10 +24,34 @@ async function searchItunes(query: string): Promise<AudioTrack | null> {
 
         if (data.resultCount > 0) {
             const track = data.results[0];
+            let movieName = track.collectionName;
+
+            // Pattern: Song Name (From "Movie Name") or [From "Movie Name"]
+            const fromMatch = movieName.match(/[(\[]From\s+"([^"\]]+)"[)\]]/i) ||
+                movieName.match(/[(\[]From\s+([^)\]]+)[)\]]/i);
+
+            if (fromMatch) {
+                movieName = fromMatch[1];
+            }
+
+            const cleanMovie = movieName
+                .replace(/\s*\(Original Motion Picture Soundtrack\)/gi, '')
+                .replace(/\s*\(Soundtrack\)/gi, '')
+                .replace(/\s*-\s*EP\s*$/gi, '')
+                .replace(/\s*-\s*Single\s*$/gi, '')
+                .replace(/\s*- OST$/gi, '')
+                .replace(/\s*\(Deluxe\)/gi, '')
+                .replace(/\s*\[Live\]/gi, '')
+                .replace(/\s*\(feat\..*?\)/gi, '') // Remove (feat. Author)
+                .replace(/\s*\[feat\..*?\]/gi, '') // Remove [feat. Author]
+                .replace(/\s*Part\s*\d+/gi, '') // Remove Part 1, Part 2 etc
+                .replace(/\s*\(\d{4}\)$/gi, '') // Remove year like (2024)
+                .trim();
+
             return {
                 title: track.trackName,
                 artist: track.artistName,
-                movie: track.collectionName, // In iTunes, collectionName is album/movie
+                movie: cleanMovie,
                 previewUrl: track.previewUrl,
                 artworkUrl: track.artworkUrl100.replace('100x100', '600x600'), // Get high res
                 source: 'itunes'
@@ -58,14 +82,46 @@ export async function getMysteryAudio(searchQuery: string): Promise<AudioTrack |
 
 
 export const regionalPlaylists = {
-    telugu: ['Pushpa 2', 'Devara', 'Guntur Kaaram', 'Salaar', 'RRR', 'Baahubali', 'Ala Vaikunthapurramuloo', 'Jersey', 'Arjun Reddy', 'Kalki 2898 AD'],
-    tamil: ['Leo', 'Jailer', 'Vikram', 'Master', 'Ponniyin Selvan', '96', 'Kaithi', 'Thiruchitrambalam', 'Vada Chennai', 'Asuran'],
-    malayalam: ['Manjummel Boys', 'Aavesham', 'Premalu', 'Bramayugam', 'Lucifer', 'Kumbalangi Nights', 'Hridayam', 'Minnal Murali', 'Thallumaala'],
-    hindi: ['Jawan', 'Pathaan', 'Animal', 'Rocky Aur Rani', 'War', 'Kabir Singh', 'Yeh Jawaani Hai Deewani', '3 Idiots']
+    telugu: [
+        'Pushpa 2', 'Devara', 'Guntur Kaaram', 'Salaar', 'RRR', 'Baahubali', 'Ala Vaikunthapurramuloo',
+        'Jersey', 'Arjun Reddy', 'Kalki 2898 AD', 'Maharshi', 'Sarileru Neekevvaru', 'Rangasthalam',
+        'Magadheera', 'Eega', 'Bommarillu', 'Happy Days', 'Athadu', 'Pokiri', 'Jalsa', 'Gabbar Singh',
+        'Attarintiki Daredi', 'Srimanthudu', 'Janatha Garage', 'Bharat Ane Nenu', 'Fidaa',
+        'Geetha Govindam', 'Agent Sai Srinivasa Athreya', 'Mathu Vadalara', 'DJ Tillu', 'Major',
+        'Sita Ramam', 'Hanu-Man', 'Hi Nanna', 'Dasara', 'Waltair Veerayya', 'Baby (Telugu)', 'Pelli Choopulu'
+    ],
+    tamil: [
+        'Leo', 'Jailer', 'Vikram', 'Master', 'Ponniyin Selvan', '96', 'Kaithi', 'Thiruchitrambalam',
+        'Vada Chennai', 'Asuran', 'Thunivu', 'Varisu', 'Bigil', 'Petta', 'Mersal', 'Kabali', 'Enthiran',
+        'Sivaji', 'Ghilli', 'Pokkiri', 'Anniyan', 'Pudhupettai', 'Polladhavan', 'Aadukalam', 'Jigarthanda',
+        'Soodhu Kavvum', 'Vikram Vedha', 'Pariyerum Perumal', 'Jai Bhim', 'Gargi', 'Viduthalai', 'Maaveeran',
+        'Maanagaram', 'Velaiilla Pattadhari', 'Mankatha'
+    ],
+    malayalam: [
+        'Manjummel Boys', 'Aavesham', 'Premalu', 'Bramayugam', 'Lucifer', 'Kumbalangi Nights',
+        'Hridayam', 'Minnal Murali', 'Thallumaala', 'Drishyam', 'Bangalore Days', 'Premam', 'Charlie',
+        'Moothon', 'Jallikattu', 'Angamaly Diaries', 'Virus', 'Trance', 'Malik', 'Kurup',
+        'Bheeshma Parvam', 'Nanpakal Nerathu Mayakkam', '2018 Movie', 'Neru', 'Falimy', 'Adi Kapyare Kootamani',
+        'Ayyappanum Koshiyum', 'Ustad Hotel'
+    ]
 };
 
 export const getRandomMovieForLanguage = (lang: string) => {
-    // @ts-ignore
-    const list = regionalPlaylists[lang] || regionalPlaylists['telugu'];
-    return list[Math.floor(Math.random() * list.length)];
+    const key = lang.toLowerCase();
+    let list: string[] = [];
+
+    if (key === 'all') {
+        // Merge the three pillars for the "All" mystery pool
+        list = [
+            ...regionalPlaylists.telugu,
+            ...regionalPlaylists.tamil,
+            ...regionalPlaylists.malayalam
+        ];
+    } else {
+        list = (regionalPlaylists as any)[key] || regionalPlaylists.telugu;
+    }
+
+    const movie = list[Math.floor(Math.random() * list.length)];
+    // Return both movie and lang for stricter search
+    return { movie, searchTag: lang === 'all' ? '' : lang };
 };

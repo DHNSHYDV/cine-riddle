@@ -14,8 +14,8 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ animation: 'fade_from_bottom', headerShown: false }}>
+    <ThemeProvider value={colorScheme === 'dark' ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: '#0b0b18' } } : DefaultTheme}>
+      <Stack screenOptions={{ animation: 'default', headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="game" />
         <Stack.Screen name="results" />

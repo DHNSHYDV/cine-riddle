@@ -7,6 +7,7 @@ interface GameStore {
     highScore: number;
     history: number[]; // IDs of guessed movies
     lastTargetMovie: Movie | null;
+    playedTracks: string[];
 
     // Actions
     incrementScore: () => void;
@@ -14,6 +15,7 @@ interface GameStore {
     resetGame: () => void;
     setLastTargetMovie: (movie: Movie) => void;
     addToHistory: (movieId: number) => void;
+    addPlayedTrack: (title: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -43,5 +45,10 @@ export const useGameStore = create<GameStore>((set) => ({
 
     addToHistory: (movieId) => set((state) => ({
         history: [...state.history, movieId]
+    })),
+
+    playedTracks: [],
+    addPlayedTrack: (title) => set((state) => ({
+        playedTracks: [...state.playedTracks, title]
     }))
 }));
