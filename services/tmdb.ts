@@ -19,10 +19,17 @@ export const fetchSouthIndianMovies = async (page = 1, language = 'all'): Promis
 
     try {
         // Increase page depth for library expansion
-        const MAX_PAGES = 50;
+        const MAX_PAGES = 300;
         const safePage = page > MAX_PAGES ? (Math.floor(Math.random() * MAX_PAGES) + 1) : page;
 
-        const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langParam}&sort_by=popularity.desc&page=${safePage}&vote_count.gte=10`;
+        // Randomize sorting to pull from different cinema layers (Popular vs New vs Hidden Gems)
+        const sortOptions = ['popularity.desc', 'primary_release_date.desc', 'revenue.desc', 'vote_count.desc'];
+        const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
+
+        // Date Range: 2000 - 2026 (User Request)
+        const dateRangeRange = '&primary_release_date.gte=2000-01-01&primary_release_date.lte=2026-12-31';
+
+        const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langParam}&sort_by=${randomSort}&page=${safePage}&vote_count.gte=10${dateRangeRange}`;
         console.log('[TMDB] Requesting URL:', url.replace(API_KEY, 'HIDDEN'));
         const response = await fetch(url);
         const data = await response.json();

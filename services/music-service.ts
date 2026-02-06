@@ -1,5 +1,4 @@
 
-
 // --- Types ---
 export interface AudioTrack {
     title: string;
@@ -78,6 +77,15 @@ export async function getMysteryAudio(searchQuery: string): Promise<AudioTrack |
     }
 
     return null;
+}
+
+/**
+ * Tighter Regional Search
+ * Appends language to ensure regional version if multiple exist
+ */
+export async function getMysteryAudioWithLang(title: string, language: string): Promise<AudioTrack | null> {
+    const query = `${title} ${language} movie songs`;
+    return getMysteryAudio(query);
 }
 
 

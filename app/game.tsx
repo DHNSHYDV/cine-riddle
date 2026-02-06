@@ -23,7 +23,7 @@ export default function GameScreen() {
     // Custom Feedback State instead of Alerts
     const [feedback, setFeedback] = useState<{ type: 'correct' | 'wrong' | 'gameover', message: string } | null>(null);
 
-    const { score, lives, incrementScore, decrementLives, resetGame, setLastTargetMovie } = useGameStore();
+    const { score, lives, incrementScore, decrementLives, resetGame, setLastTargetMovie, history, addToHistory, markPageVisited, getUnvisitedRandomPage } = useGameStore();
 
     useEffect(() => {
         loadGame();
@@ -32,16 +32,38 @@ export default function GameScreen() {
     const loadGame = async () => {
         setLoading(true);
         setFeedback(null);
-        // Fetch random page between 1 and 50 to get a mix of popular and mid-range
-        const randomPage = Math.floor(Math.random() * 50) + 1;
+
         try {
-            const fetchedMovies = await fetchSouthIndianMovies(randomPage, lang as string);
+            // Use store logic to get a fresh page
+            const currentLang = (lang as string) || 'all';
+            const randomPage = getUnvisitedRandomPage(currentLang, 300);
+
+            console.log(`[Game] Fetching ${currentLang} movies from page ${randomPage}`);
+
+            const fetchedMovies = await fetchSouthIndianMovies(randomPage, currentLang);
 
             if (fetchedMovies.length > 3) {
-                setMovies(fetchedMovies);
-                startRound(fetchedMovies);
+                // Mark this page as visited so we don't fetch it again this session
+                markPageVisited(currentLang, randomPage);
+
+                // Filter out movies already seen in this session
+                const uniqueMovies = fetchedMovies.filter(m => !history.includes(m.id));
+
+                // If we ran out of unique movies on this page, just use available ones (fallback)
+                const finalMovies = uniqueMovies.length >= 4 ? uniqueMovies : fetchedMovies;
+
+                // Retry if still not enough unique movies (very unlikely with page tracking)
+                if (finalMovies.length < 4) {
+                    console.log('[Game] Not enough unique movies, retrying...');
+                    return loadGame();
+                }
+
+                setMovies(finalMovies);
+                startRound(finalMovies);
             } else {
-                Alert.alert("Error", "Could not load movies. Please check your internet.");
+                // If page is empty (rare), try again
+                console.log('[Game] Empty page, retrying...');
+                return loadGame();
             }
         } catch (e) {
             console.error("Fetch error in GameScreen:", e);
@@ -52,6 +74,7 @@ export default function GameScreen() {
 
     const startRound = (availableMovies: Movie[]) => {
         setFeedback(null);
+
         // Pick 4 unique movies for options
         const shuffled = [...availableMovies].sort(() => 0.5 - Math.random());
         const roundOptions = shuffled.slice(0, 4);
@@ -59,6 +82,8 @@ export default function GameScreen() {
 
         setCurrentRoundMovies(roundOptions);
         setTargetMovie(target);
+        addToHistory(target.id); // Add to session history
+
         setBlurAmount(20);
         setShowClue(false);
     };
