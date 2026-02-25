@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { G, Path, Text as SvgText } from 'react-native-svg';
 import { MatrixBackground } from '../components/MatrixBackground';
 import { supabase } from '../services/supabase';
+import { checkForUpdates } from '../services/update-service';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,7 +45,7 @@ const StartShowButton = ({ onPress, text }: { onPress: () => void, text: string 
     }));
 
     // High-fidelity liquid palette
-    const liquidColors = [
+    const liquidColors: readonly [string, string, ...string[]] = [
         'rgba(255, 255, 255, 0)',
         'rgba(255, 255, 255, 0.03)',
         'rgba(255, 255, 255, 0.15)',
@@ -168,10 +169,12 @@ export default function LandingScreen() {
         }
     }
 
-    // Sketch Animation Logic
     useEffect(() => {
         sketchScale.value = withRepeat(withTiming(1.05, { duration: 2000, easing: Easing.inOut(Easing.ease) }), -1, true);
         sketchSway.value = withRepeat(withTiming(3, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
+
+        // Check for updates on startup
+        checkForUpdates();
     }, []);
 
     const sketchyIconStyle = useAnimatedStyle(() => ({
