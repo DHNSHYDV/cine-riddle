@@ -46,20 +46,22 @@ export default function GameScreen() {
                 // Mark this page as visited so we don't fetch it again this session
                 markPageVisited(currentLang, randomPage);
 
-                // Filter out movies already seen in this session
+                // Filter out movies already seen in this session via history
                 const uniqueMovies = fetchedMovies.filter(m => !history.includes(m.id));
 
-                // If we ran out of unique movies on this page, just use available ones (fallback)
-                const finalMovies = uniqueMovies.length >= 4 ? uniqueMovies : fetchedMovies;
-
-                // Retry if still not enough unique movies (very unlikely with page tracking)
-                if (finalMovies.length < 4) {
-                    console.log('[Game] Not enough unique movies, retrying...');
-                    return loadGame();
+                // If this page is mostly seen, try to merge or just fetch another page
+                if (uniqueMovies.length < 5) {
+                    console.log('[Game] Page mostly seen, fetching fresh batch...');
+                    const anotherPage = getUnvisitedRandomPage(currentLang, 300);
+                    const moreMovies = await fetchSouthIndianMovies(anotherPage, currentLang);
+                    markPageVisited(currentLang, anotherPage);
+                    const combined = [...uniqueMovies, ...moreMovies.filter(m => !history.includes(m.id))];
+                    setMovies(combined);
+                    startRound(combined);
+                } else {
+                    setMovies(uniqueMovies);
+                    startRound(uniqueMovies);
                 }
-
-                setMovies(finalMovies);
-                startRound(finalMovies);
             } else {
                 // If page is empty (rare), try again
                 console.log('[Game] Empty page, retrying...');
@@ -96,6 +98,10 @@ export default function GameScreen() {
             incrementScore();
             setBlurAmount(0); // Reveal perfectly
             setFeedback({ type: 'correct', message: `Yes! It's ${targetMovie?.title}` });
+
+            // CRITICAL: Remove from current pool so it doesn't repeat immediately
+            const updatedPool = movies.filter(m => m.id !== targetMovie.id);
+            setMovies(updatedPool);
         } else {
             // Wrong!
             decrementLives();
@@ -179,7 +185,16 @@ export default function GameScreen() {
                         </View>
 
                         {feedback.type === 'correct' && (
-                            <TouchableOpacity onPress={() => startRound(movies)} className="bg-white p-3 rounded-full">
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (movies.length < 4) {
+                                        loadGame(); // Refresh from API when pool is low
+                                    } else {
+                                        startRound(movies);
+                                    }
+                                }}
+                                className="bg-white p-3 rounded-full"
+                            >
                                 <ArrowRight color="green" size={24} />
                             </TouchableOpacity>
                         )}

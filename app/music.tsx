@@ -12,6 +12,7 @@ import { AudioTrack, getMysteryAudioWithLang, getRandomMovieForLanguage, regiona
 import { supabase } from '../services/supabase';
 import { fetchSouthIndianMovies } from '../services/tmdb';
 import { useGameStore } from '../store/gameStore';
+import { Movie } from '../types';
 
 const { width } = Dimensions.get('window');
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
@@ -31,6 +32,10 @@ export default function MusicGameScreen() {
     const [showClue, setShowClue] = useState(false);
     const [imageBlurAmount, setImageBlurAmount] = useState(80);
     const [feedback, setFeedback] = useState<{ type: 'correct' | 'wrong' | 'gameover', message: string } | null>(null);
+
+    // Pool management for Music mode
+    const [localMoviePool, setLocalMoviePool] = useState<Movie[]>([]);
+
     const { score, lives, incrementScore, decrementLives, playedTracks, addPlayedTrack, markPageVisited, getUnvisitedRandomPage } = useGameStore();
 
     const soundRef = useRef<Audio.Sound | null>(null);
@@ -87,45 +92,57 @@ export default function MusicGameScreen() {
             setFeedback(null);
 
             let audioData = null;
-            let attempts = 0;
-            let selectedMovie = "";
+            let currentPool = [...localMoviePool];
 
-            while (!audioData && attempts < 10) { // Increased attempts
-                // Use unvisited page logic
+            // 1. If pool is dry, fetch a fresh batch
+            if (currentPool.length < 5) {
+                console.log("[Music] Pool low, fetching new batch...");
                 const randomPage = getUnvisitedRandomPage(effectiveLang, 300);
-                console.log(`[Music] Fetching ${effectiveLang} movies (Page ${randomPage})`);
+                const fetched = await fetchSouthIndianMovies(randomPage, effectiveLang);
+                markPageVisited(effectiveLang, randomPage);
 
-                const moviesFromTMDB = await fetchSouthIndianMovies(randomPage, effectiveLang);
-
-                if (moviesFromTMDB && moviesFromTMDB.length > 0) {
-                    markPageVisited(effectiveLang, randomPage);
-
-                    const candidatesFiltered = moviesFromTMDB.filter(m => !playedTracks.includes(m.title));
-                    const candidates = candidatesFiltered.sort(() => 0.5 - Math.random()).slice(0, 3);
-
-                    for (const m of candidates) {
-                        const data = await getMysteryAudioWithLang(m.title, effectiveLang);
-                        if (data && data.previewUrl) {
-                            if (effectiveLang !== 'all') {
-                                const lowerTitle = data.title.toLowerCase();
-                                const lowerMovie = data.movie.toLowerCase();
-                                const targetMovieLower = m.title.toLowerCase();
-                                const isEnglishGeneric = ['the', 'and', 'my', 'me', 'you', 'love'].every(w => lowerTitle.includes(w)) && !lowerMovie.includes(targetMovieLower);
-                                if (isEnglishGeneric) continue;
-                            }
-                            audioData = data;
-                            selectedMovie = m.title;
-                            break;
-                        }
-                    }
-                }
-                attempts++;
+                // Filter out already played movies from the new batch
+                const fresh = fetched.filter(m => !playedTracks.includes(m.title));
+                currentPool = [...currentPool, ...fresh];
             }
 
+            // 2. Try to find a playable track from the pool
+            let selectedMovie = "";
+            let movieToTry = null;
+
+            // Simple shuffle for variety
+            currentPool = currentPool.sort(() => 0.5 - Math.random());
+
+            for (let i = 0; i < currentPool.length; i++) {
+                movieToTry = currentPool[i];
+                console.log(`[Music] Trying to find audio for: ${movieToTry.title}`);
+
+                const data = await getMysteryAudioWithLang(movieToTry.title, effectiveLang);
+
+                if (data && data.previewUrl) {
+                    // Filter out generic English hits if not in "all" mode
+                    if (effectiveLang !== 'all') {
+                        const lowerTitle = data.title.toLowerCase();
+                        const targetMovieLower = movieToTry.title.toLowerCase();
+                        if (['the', 'and', 'love'].every(w => lowerTitle.includes(w)) && !data.movie.toLowerCase().includes(targetMovieLower)) {
+                            continue;
+                        }
+                    }
+
+                    audioData = data;
+                    selectedMovie = movieToTry.title;
+                    // Remove this movie from the pool so we don't try it again
+                    currentPool.splice(i, 1);
+                    break;
+                }
+            }
+
+            // 3. Fallback to hardcoded list if API depth failed
             if (!audioData) {
+                console.log("[Music] API depth failed, using hardcoded fallback");
                 let movieData = getRandomMovieForLanguage(effectiveLang);
                 let fallbackAttempts = 0;
-                while (playedTracks.includes(movieData.movie) && fallbackAttempts < 5) {
+                while (playedTracks.includes(movieData.movie) && fallbackAttempts < 10) {
                     movieData = getRandomMovieForLanguage(effectiveLang);
                     fallbackAttempts++;
                 }
@@ -133,8 +150,9 @@ export default function MusicGameScreen() {
                 audioData = await getMysteryAudioWithLang(selectedMovie, effectiveLang);
             }
 
-            if (!audioData) throw new Error("Could not find music");
+            if (!audioData) throw new Error("Could not find music after fallback");
 
+            setLocalMoviePool(currentPool);
             addPlayedTrack(selectedMovie);
             setTrack(audioData);
             setCorrectMovie(audioData.movie);

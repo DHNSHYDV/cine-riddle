@@ -96,21 +96,30 @@ export const regionalPlaylists = {
         'Magadheera', 'Eega', 'Bommarillu', 'Happy Days', 'Athadu', 'Pokiri', 'Jalsa', 'Gabbar Singh',
         'Attarintiki Daredi', 'Srimanthudu', 'Janatha Garage', 'Bharat Ane Nenu', 'Fidaa',
         'Geetha Govindam', 'Agent Sai Srinivasa Athreya', 'Mathu Vadalara', 'DJ Tillu', 'Major',
-        'Sita Ramam', 'Hanu-Man', 'Hi Nanna', 'Dasara', 'Waltair Veerayya', 'Baby (Telugu)', 'Pelli Choopulu'
+        'Sita Ramam', 'Hanu-Man', 'Hi Nanna', 'Dasara', 'Waltair Veerayya', 'Baby (Telugu)', 'Pelli Choopulu',
+        'Pushpa: The Rise', 'Akhanda', 'Uppena', 'Bimbisara', 'Karthikeya 2', 'DJ: Duvvada Jagannadham',
+        'Geetha Govindam', 'Aravinda Sametha', 'Jai Lava Kusa', 'Khaidi No. 150', 'Srimanthudu', 'Nannaku Prematho',
+        'Mirchi', 'Dookudu', 'Leader', 'Vedam', 'Prasthanam', 'Kanche', 'Malliswari', 'Manmadhudu', 'Shiva', 'Nuvvu Naaku Nachav'
     ],
     tamil: [
         'Leo', 'Jailer', 'Vikram', 'Master', 'Ponniyin Selvan', '96', 'Kaithi', 'Thiruchitrambalam',
         'Vada Chennai', 'Asuran', 'Thunivu', 'Varisu', 'Bigil', 'Petta', 'Mersal', 'Kabali', 'Enthiran',
         'Sivaji', 'Ghilli', 'Pokkiri', 'Anniyan', 'Pudhupettai', 'Polladhavan', 'Aadukalam', 'Jigarthanda',
         'Soodhu Kavvum', 'Vikram Vedha', 'Pariyerum Perumal', 'Jai Bhim', 'Gargi', 'Viduthalai', 'Maaveeran',
-        'Maanagaram', 'Velaiilla Pattadhari', 'Mankatha'
+        'Maanagaram', 'Velaiilla Pattadhari', 'Mankatha', 'Doctor', 'Beast', 'Valimai', 'Annaatthe', 'Darbar',
+        'Viswasam', 'Vada Chennai', 'Theri', 'Vedalam', 'Kaththi', 'Arrambam', 'Thuppakki', 'Mankatha',
+        'Singam', 'Ayan', 'Subramaniapuram', 'Paruthiveerani', 'Ghajini', '7G Rainbow Colony', 'Kaakha Kaakha',
+        'Saamy', 'Run', 'Alaipayuthey', 'Kushi', 'Kannathil Muthamittal'
     ],
     malayalam: [
         'Manjummel Boys', 'Aavesham', 'Premalu', 'Bramayugam', 'Lucifer', 'Kumbalangi Nights',
         'Hridayam', 'Minnal Murali', 'Thallumaala', 'Drishyam', 'Bangalore Days', 'Premam', 'Charlie',
         'Moothon', 'Jallikattu', 'Angamaly Diaries', 'Virus', 'Trance', 'Malik', 'Kurup',
         'Bheeshma Parvam', 'Nanpakal Nerathu Mayakkam', '2018 Movie', 'Neru', 'Falimy', 'Adi Kapyare Kootamani',
-        'Ayyappanum Koshiyum', 'Ustad Hotel'
+        'Ayyappanum Koshiyum', 'Ustad Hotel', 'Lucifer', 'Pulimurugan', 'Take Off', 'Maheshinte Prathikaaram',
+        'Pathemari', 'Ennu Ninte Moideen', 'Munnariyippu', 'North 24 Kaatham', 'Celluloid', 'Ustad Hotel',
+        'Diamond Necklace', 'Thattathin Marayathu', 'Traffic', 'Pranchiyettan & the Saint', 'Bodyguard',
+        'Kerala Cafe', 'Paleri Manikyam', 'Neelathamara', 'Big B', 'Classmates', 'Manichitrathazhu'
     ]
 };
 
