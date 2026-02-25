@@ -66,14 +66,15 @@ export const fetchTieredMovies = async (score: number, language = 'all'): Promis
     let filterParams = '';
 
     if (score < 15) {
-        // Tier 1: Easy - High popularity hits
-        filterParams = '&sort_by=popularity.desc&vote_count.gte=500';
+        // Tier 1: Easy - Guaranteed hits
+        filterParams = '&sort_by=popularity.desc&vote_count.gte=300';
     } else if (score < 30) {
-        // Tier 2: Medium - Moderate popularity
-        filterParams = '&sort_by=popularity.desc&vote_count.gte=100&vote_count.lte=500';
+        // Tier 2: Medium - Moderate challenge
+        filterParams = '&sort_by=popularity.desc&vote_count.gte=80&vote_count.lte=500';
     } else {
-        // Tier 3: Hard - Niche titles
-        filterParams = '&sort_by=vote_count.asc&vote_count.gte=10&vote_count.lte=100';
+        // Tier 3: Hard - Hidden gems (not too obscure, just niche)
+        // Shuffling by popularity.asc to find less-known titles
+        filterParams = '&sort_by=popularity.asc&vote_count.gte=10&vote_count.lte=150';
     }
 
     try {

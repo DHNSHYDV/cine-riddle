@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Image, Text, TouchableOpacity, View } from 'r
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../services/supabase';
-import { fetchTieredMovies, getImageUrl } from '../services/tmdb';
+import { fetchSouthIndianMovies, fetchTieredMovies, getImageUrl } from '../services/tmdb';
 import { useGameStore } from '../store/gameStore';
 import { Movie } from '../types';
 
@@ -29,43 +29,43 @@ export default function GameScreen() {
         loadGame();
     }, []);
 
-    const loadGame = async () => {
+    const loadGame = async (retryCount = 0) => {
         setLoading(true);
         setFeedback(null);
 
         try {
             const currentLang = (lang as string) || 'all';
 
-            // Use NEW tiered fetching logic based on current score
-            const fetchedMovies = await fetchTieredMovies(score, currentLang);
+            // 1. Try fetching tiered movies based on score
+            let fetchedMovies = await fetchTieredMovies(score, currentLang);
 
-            if (fetchedMovies.length > 5) {
+            // 2. Fallback if tiered batch is empty
+            if (fetchedMovies.length === 0) {
+                console.log('[Game] Tiered batch empty, falling back to general popularity...');
+                fetchedMovies = await fetchSouthIndianMovies(Math.floor(Math.random() * 20) + 1, currentLang);
+            }
+
+            if (fetchedMovies.length > 0) {
                 // Filter out movies already seen in this session via history
                 const uniqueMovies = fetchedMovies.filter(m => !history.includes(m.id));
 
-                // If this batch is mostly seen, just merge with another fetch or keep going
-                if (uniqueMovies.length < 5) {
-                    console.log('[Game] Batch mostly seen, fetching another variety...');
-                    const moreMovies = await fetchTieredMovies(score, currentLang);
-                    const combined = [...uniqueMovies, ...moreMovies.filter(m => !history.includes(m.id))];
-
-                    // Shuffle the combined pool to ensure variety
-                    const finalPool = combined.sort(() => 0.5 - Math.random());
-                    setMovies(finalPool);
-                    startRound(finalPool);
-                } else {
-                    const finalPool = uniqueMovies.sort(() => 0.5 - Math.random());
-                    setMovies(finalPool);
-                    startRound(finalPool);
+                if (uniqueMovies.length < 4 && retryCount < 2) {
+                    // If we have too few unique movies, try one more time with a different page
+                    console.log('[Game] Not enough unique movies, retrying fetch...');
+                    return loadGame(retryCount + 1);
                 }
+
+                // If we still have enough to play (at least 4), start
+                const pool = uniqueMovies.length >= 4 ? uniqueMovies : fetchedMovies;
+                const finalPool = pool.sort(() => 0.5 - Math.random());
+                setMovies(finalPool);
+                startRound(finalPool);
             } else {
-                // If page is empty (rare), try again
-                console.log('[Game] Empty page, retrying...');
-                return loadGame();
+                Alert.alert("Error", "Could not load any movies. Please check your connection.");
             }
         } catch (e) {
             console.error("Fetch error in GameScreen:", e);
-            Alert.alert("Error", "Could not fetch movies.");
+            Alert.alert("Error", "An unexpected error occurred.");
         }
         setLoading(false);
     };
