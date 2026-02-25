@@ -61,13 +61,23 @@ export default function ProfileScreen() {
     // --- Actions ---
 
     async function handleLogin() {
+        console.log('[Auth] Attempting login for:', email);
         setLoading(true);
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        setLoading(false);
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            setLoading(false);
 
-        if (error) Alert.alert('Login Failed', error.message);
-        else {
-            checkSession(); // Refresh state
+            if (error) {
+                console.error('[Auth] Login Error Object:', JSON.stringify(error, null, 2));
+                Alert.alert('Login Failed', error.message);
+            } else {
+                console.log('[Auth] Login success for:', data.user?.id);
+                checkSession(); // Refresh state
+            }
+        } catch (err) {
+            setLoading(false);
+            console.error('[Auth] Critical Login Exception:', err);
+            Alert.alert('System Error', 'An unexpected network error occurred.');
         }
     }
 
@@ -77,29 +87,44 @@ export default function ProfileScreen() {
             return;
         }
 
+        console.log('[Auth] Attempting signup for:', email);
         setLoading(true);
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        setLoading(false);
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        username: newUsername
+                    }
+                }
+            });
+            setLoading(false);
 
-        if (error) {
-            Alert.alert('Signup Failed', error.message);
-        } else {
-            console.log("Signup success, user:", data.user?.id);
+            if (error) {
+                console.error('[Auth] Signup Error Object:', JSON.stringify(error, null, 2));
+                Alert.alert('Signup Failed', error.message);
+            } else {
+                console.log("Signup success, user:", data.user?.id);
 
-            // Create Profile immediately
-            if (data.user) {
-                await supabase.from('profiles').insert({
-                    id: data.user.id,
-                    username: newUsername
-                });
+                // Create Profile immediately
+                if (data.user) {
+                    await supabase.from('profiles').insert({
+                        id: data.user.id,
+                        username: newUsername
+                    });
+                }
+
+                Alert.alert(
+                    'Verify Identity',
+                    'A confirmation link has been sent.\n\nPlease authorize access via your inbox (check spam if hidden).',
+                    [{ text: 'OK', onPress: () => setAuthMode('login') }]
+                );
             }
-
-            // Minimal, subtle spam warning as requested
-            Alert.alert(
-                'Verify Identity',
-                'A confirmation link has been sent.\n\nPlease authorize access via your inbox (check spam if hidden).',
-                [{ text: 'OK', onPress: () => setAuthMode('login') }]
-            );
+        } catch (err) {
+            setLoading(false);
+            console.error('[Auth] Critical Signup Exception:', err);
+            Alert.alert('System Error', 'An unexpected network error occurred.');
         }
     }
 

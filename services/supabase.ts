@@ -7,6 +7,9 @@ import 'react-native-url-polyfill/auto';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
+console.log('[Supabase] Initializing with URL:', supabaseUrl ? 'YES' : 'MISSING');
+console.log('[Supabase] Anon Key present:', supabaseAnonKey ? 'YES' : 'MISSING');
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         storage: AsyncStorage,

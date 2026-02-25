@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { ArrowLeft, Trophy } from 'lucide-react-native';
 import React, { memo, useCallback, useState } from 'react';
@@ -22,9 +23,18 @@ const leaderboardCache: Record<string, ScoreEntry[]> = {};
 // Memoized Item for smoother scrolling
 const ScoreItem = memo(({ item, index }: { item: ScoreEntry; index: number }) => {
     const rankColor = index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#fff';
+    const isElite = item.score >= 100;
 
     return (
-        <View className="flex-row items-center bg-[#1a1a2e] mb-2 p-4 rounded-lg border border-[#333]">
+        <View className={`flex-row items-center bg-[#1a1a2e] mb-2 p-4 rounded-lg border ${isElite ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'border-[#333]'}`}>
+            {isElite && (
+                <LinearGradient
+                    colors={['transparent', 'rgba(255,215,0,0.1)', 'transparent']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 8 }}
+                />
+            )}
             {/* Rank */}
             <View className="w-10 items-center justify-center">
                 <Text className="text-xl font-bold font-mono" style={{ color: rankColor }}>

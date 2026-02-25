@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Image, Text, TouchableOpacity, View } from 'r
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../services/supabase';
-import { fetchSouthIndianMovies, getImageUrl } from '../services/tmdb';
+import { fetchTieredMovies, getImageUrl } from '../services/tmdb';
 import { useGameStore } from '../store/gameStore';
 import { Movie } from '../types';
 
@@ -23,7 +23,7 @@ export default function GameScreen() {
     // Custom Feedback State instead of Alerts
     const [feedback, setFeedback] = useState<{ type: 'correct' | 'wrong' | 'gameover', message: string } | null>(null);
 
-    const { score, lives, incrementScore, decrementLives, resetGame, setLastTargetMovie, history, addToHistory, markPageVisited, getUnvisitedRandomPage } = useGameStore();
+    const { score, lives, incrementScore, decrementLives, resetGame, setLastTargetMovie, history, addToHistory, markPageVisited, getUnvisitedRandomPage, isElite } = useGameStore();
 
     useEffect(() => {
         loadGame();
@@ -34,33 +34,29 @@ export default function GameScreen() {
         setFeedback(null);
 
         try {
-            // Use store logic to get a fresh page
             const currentLang = (lang as string) || 'all';
-            const randomPage = getUnvisitedRandomPage(currentLang, 300);
 
-            console.log(`[Game] Fetching ${currentLang} movies from page ${randomPage}`);
+            // Use NEW tiered fetching logic based on current score
+            const fetchedMovies = await fetchTieredMovies(score, currentLang);
 
-            const fetchedMovies = await fetchSouthIndianMovies(randomPage, currentLang);
-
-            if (fetchedMovies.length > 3) {
-                // Mark this page as visited so we don't fetch it again this session
-                markPageVisited(currentLang, randomPage);
-
+            if (fetchedMovies.length > 5) {
                 // Filter out movies already seen in this session via history
                 const uniqueMovies = fetchedMovies.filter(m => !history.includes(m.id));
 
-                // If this page is mostly seen, try to merge or just fetch another page
+                // If this batch is mostly seen, just merge with another fetch or keep going
                 if (uniqueMovies.length < 5) {
-                    console.log('[Game] Page mostly seen, fetching fresh batch...');
-                    const anotherPage = getUnvisitedRandomPage(currentLang, 300);
-                    const moreMovies = await fetchSouthIndianMovies(anotherPage, currentLang);
-                    markPageVisited(currentLang, anotherPage);
+                    console.log('[Game] Batch mostly seen, fetching another variety...');
+                    const moreMovies = await fetchTieredMovies(score, currentLang);
                     const combined = [...uniqueMovies, ...moreMovies.filter(m => !history.includes(m.id))];
-                    setMovies(combined);
-                    startRound(combined);
+
+                    // Shuffle the combined pool to ensure variety
+                    const finalPool = combined.sort(() => 0.5 - Math.random());
+                    setMovies(finalPool);
+                    startRound(finalPool);
                 } else {
-                    setMovies(uniqueMovies);
-                    startRound(uniqueMovies);
+                    const finalPool = uniqueMovies.sort(() => 0.5 - Math.random());
+                    setMovies(finalPool);
+                    startRound(finalPool);
                 }
             } else {
                 // If page is empty (rare), try again
@@ -148,7 +144,17 @@ export default function GameScreen() {
                 <TouchableOpacity onPress={() => router.back()}>
                     <ChevronLeft color="white" size={28} />
                 </TouchableOpacity>
-                <Text className="text-white text-lg font-bold">Score: {score}</Text>
+
+                {/* Score & Elite Badge */}
+                <View className="flex-row items-center gap-2">
+                    <Text className="text-white text-lg font-bold">Score: {score}</Text>
+                    {isElite() && (
+                        <Animated.View entering={FadeIn} className="bg-yellow-500/20 px-2 py-0.5 rounded border border-yellow-500/50">
+                            <Text className="text-yellow-500 text-[10px] font-bold uppercase tracking-tighter">ELITE</Text>
+                        </Animated.View>
+                    )}
+                </View>
+
                 <View className="flex-row items-center space-x-1">
                     <Heart color={lives > 0 ? "red" : "gray"} fill={lives > 0 ? "red" : "gray"} size={24} />
                     <Text className="text-white font-bold">{lives}</Text>

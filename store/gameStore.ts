@@ -19,12 +19,13 @@ interface GameStore {
     addPlayedTrack: (title: string) => void;
     markPageVisited: (lang: string, page: number) => void;
     getUnvisitedRandomPage: (lang: string, maxPages: number) => number;
+    isElite: () => boolean;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
     score: 0,
     lives: 3,
-    highScore: 0,
+    highScore: 0, // In-session high score
     history: [],
     lastTargetMovie: null,
 
@@ -42,18 +43,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     resetGame: () => set({
         score: 0,
         lives: 3,
-        history: [],
+        // history: [], // We keep history across games in the same session to prevent repeats!
         lastTargetMovie: null
     }),
 
     addToHistory: (movieId) => set((state) => ({
-        history: [...state.history, movieId]
+        history: [...state.history, movieId].slice(-500) // Keep last 500 to prevent repeats but save memory
     })),
 
     playedTracks: [],
     addPlayedTrack: (title) => set((state) => ({
         playedTracks: [...state.playedTracks, title]
     })),
+
+    isElite: () => {
+        const state = get();
+        return state.score >= 100 || state.highScore >= 100;
+    },
 
     // New: Visited Pages Logic
     visitedPages: { 'telugu': [], 'tamil': [], 'malayalam': [], 'all': [] },

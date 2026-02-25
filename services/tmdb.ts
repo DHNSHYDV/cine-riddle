@@ -23,11 +23,11 @@ export const fetchSouthIndianMovies = async (page = 1, language = 'all'): Promis
         const safePage = page > MAX_PAGES ? (Math.floor(Math.random() * MAX_PAGES) + 1) : page;
 
         // Randomize sorting to pull from different cinema layers (Popular vs New vs Hidden Gems)
-        const sortOptions = ['popularity.desc', 'primary_release_date.desc', 'revenue.desc', 'vote_count.desc'];
+        const sortOptions = ['popularity.desc', 'vote_count.desc'];
         const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
 
-        // Date Range: 2000 - 2026 (User Request)
-        const dateRangeRange = '&primary_release_date.gte=2000-01-01&primary_release_date.lte=2026-12-31';
+        // Date Range: 2010 - 2026 (User Request)
+        const dateRangeRange = '&primary_release_date.gte=2010-01-01&primary_release_date.lte=2026-12-31';
 
         const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langParam}&sort_by=${randomSort}&page=${safePage}&vote_count.gte=10${dateRangeRange}`;
         console.log('[TMDB] Requesting URL:', url.replace(API_KEY, 'HIDDEN'));
@@ -44,6 +44,49 @@ export const fetchSouthIndianMovies = async (page = 1, language = 'all'): Promis
         return data.results || [];
     } catch (error) {
         console.error('Error fetching movies:', error);
+        return [];
+    }
+};
+
+/**
+ * Fetches movies based on tiered difficulty:
+ * Tier 1 (Easy): score < 15 -> High popularity, high vote count
+ * Tier 2 (Medium): 15-30 -> Moderate popularity
+ * Tier 3 (Hard): 30+ -> Niche gems, lower popularity
+ */
+export const fetchTieredMovies = async (score: number, language = 'all'): Promise<Movie[]> => {
+    if (!API_KEY) return MOCK_MOVIES;
+
+    let langParam = ALL_SOUTH_LANGUAGES;
+    if (language === 'telugu') langParam = 'te';
+    if (language === 'tamil') langParam = 'ta';
+    if (language === 'malayalam') langParam = 'ml';
+
+    const dateRange = '&primary_release_date.gte=2010-01-01&primary_release_date.lte=2026-12-31';
+    let filterParams = '';
+
+    if (score < 15) {
+        // Tier 1: Easy - High popularity hits
+        filterParams = '&sort_by=popularity.desc&vote_count.gte=500';
+    } else if (score < 30) {
+        // Tier 2: Medium - Moderate popularity
+        filterParams = '&sort_by=popularity.desc&vote_count.gte=100&vote_count.lte=500';
+    } else {
+        // Tier 3: Hard - Niche titles
+        filterParams = '&sort_by=vote_count.asc&vote_count.gte=10&vote_count.lte=100';
+    }
+
+    try {
+        // Fetch from first 10 pages for variety within tiers
+        const page = Math.floor(Math.random() * 10) + 1;
+        const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langParam}${filterParams}${dateRange}&page=${page}`;
+        console.log(`[TMDB] Tiered Fetch (Score: ${score}, Page: ${page}):`, url.replace(API_KEY, 'HIDDEN'));
+
+        const response = await fetch(url);
+        const data = await response.json();
+        return data.results || [];
+    } catch (error) {
+        console.error('Error fetching tiered movies:', error);
         return [];
     }
 };
